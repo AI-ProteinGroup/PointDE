@@ -7,7 +7,7 @@ Protein-protein interactions (PPIs) play essential roles in maintain life. Due t
 
 ## Data process
 <p align="center">
-  <img src="figure/Figure_1.jpg" alt="protocol" width="80%">
+  <img src="figure/Figure_1.png" alt="protocol" width="80%">
 </p> 
 
 ## Requirements
@@ -81,17 +81,17 @@ The output will be kept in [ssr_sv/{sv_dir}]. The prediction results will be kep
 ## Result 
 ### Performance on Dockground Dataset
 <p align="center">
-  <img src="figure/Figure_3.jpg" alt="network" width="80%">
+  <img src="figure/Figure_3.png" alt="network" width="80%">
 </p> 
 
 ### Performance on our new Antibody-Antigen Benchmark
 <p align="center">
-  <img src="figure/Figure_4.jpg" alt="network" width="80%">
+  <img src="figure/Figure_4.png" alt="network" width="80%">
 </p>
 
 ### T-SNE analysis
 <p align="center">
-  <img src="figure/Figure_5.jpg" alt="network" width="80%">
+  <img src="figure/Figure_5.png" alt="network" width="80%">
 </p>
 
 
