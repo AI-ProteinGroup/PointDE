@@ -1,3 +1,5 @@
 checkpoint/*
+!checkpoint/.gitkeep
 data/*
+!data/.gitkeep
 __pycache__
