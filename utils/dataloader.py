@@ -196,76 +196,6 @@ class PPI4DOCKDataLoader(Dataset):
     def __len__(self):
         return len(self.datapath)
 
-    def _get_item(self, index):
-        
-        
-        # if index in self.cache:
-        #     point_set, label = self.cache[index]
-        # else:
-        #     path_and_index = self.datapath[index].path_and_index.split('')
-        #     path = path_and_index[0]
-        #     label = path_and_index.split[1]
-        #     #print(path)
-        #     #print(label)
-        #     #label = self.classes[self.datapath[index][0]]
-        #     #label = np.array([label]).astype(np.int32)
-        #     point_set = np.loadtxt(path, delimiter=' ').astype(np.float32) #[N,3+4+20+2]
-
-        #     point_set[:, 0:3] = pc_normalize(point_set[:, 0:3])
-
-        #     if self.use_ph:
-        #         npoints = point_set.shape[0]
-        #         table = np.tile(self.ph_table,[npoints,1,1])
-        #         res_f = point_set[:,7:27]
-        #         ph_f = table[res_f==1]
-        #         a = point_set[:,0:27]
-        #         b = point_set[:,[27,28]]
-        #         point_set = np.concatenate((a,ph_f,b),axis=1) #29+6=35
-            #print(p.shape)
-
-            #if point_set.shape[0]!=500:
-            #    print(path)
-            #    print(point_set.shape[0])
-            #    print('lig',point_set[point_set[:,-1]==1].shape[0])
-            #    print('rec',point_set[point_set[:,-1]==0].shape[0])
-            #print(point_set.shape)
-            #FPS
-            
-            
-            #point_set = point_set[:,[0,1,2,3,4,5,6,27,28]]
-            
-            #R= point_set[point[:,-1]==0]
-            #L= point_set[point[:,-1]==1]
-
-            #if point_set.shape[0]>self.npoints:
-            #    point_set = interface_nearest_point_sample(point_set, self.npoints)
-
-            '''
-            f_num = point_set.shape[1]
-
-            if point_set.shape[0]>self.npoints:
-                if self.uniform:
-                    point_set = farthest_point_sample(point_set, self.npoints)
-                else:
-                    point_set = point_set[0:self.npoints,:]
-                point_set[:, 0:3] = pc_normalize(point_set[:, 0:3])
-            else:
-                point_set[:, 0:3] = pc_normalize(point_set[:, 0:3])
-                padding = np.zeros((self.npoints-point_set.shape[0],f_num))
-                padding = padding.astype(np.float32)
-                point_set = np.concatenate((point_set,padding))
-
-            #point_set[:, 0:3] = pc_normalize(point_set[:, 0:3])
-            point_set = point_set[:,[0,1,2,3,4,5,6,27,28]]
-            
-            if not self.normal_channel:
-                point_set = point_set[:, 0:3]
-
-            '''
-
-            # if len(self.cache) < self.cache_size:
-            #     self.cache[index] = (point_set, label)
-
     def __getitem__(self, index):
         point_set = self.data[index]
         label = self.labels[index]
@@ -273,6 +203,9 @@ class PPI4DOCKDataLoader(Dataset):
         return point_set,label
 
 class DataLoaderForSplit(Dataset):
+    """
+    Dataloader for Split in Cross validation
+    """
     def __init__(self,root,input_complex,all_data_path,use_res=True):
         self.complex = input_complex
         self.all_data_path = all_data_path
@@ -435,6 +368,9 @@ class DataLoaderForCV(Dataset):
         return point_set,label
 
 class DataLoaderForHitOnComplex(Dataset):
+    """
+    Dataloader for Hit (load result path)
+    """
     def __init__(self, root,  npoint=1000, use_res=True):
         self.root = root
         print(self.root)
@@ -444,6 +380,9 @@ class DataLoaderForHitOnComplex(Dataset):
         self.file_list = os.listdir(self.root)
         self.datapath = [os.path.join(self.root,line.rstrip()) for line in self.file_list]
         print('The size of data is %d'%(len(self.datapath)))
+
+        self.cache_size = 15000  # how many data points to cache in memory
+        self.cache = {}  # from index to (point_set, cls) tuple
     
     def get_size(self):
         return len(self.datapath)
@@ -459,7 +398,6 @@ class DataLoaderForHitOnComplex(Dataset):
             path = self.datapath[index]
             point_set = np.loadtxt(path, delimiter=' ').astype(np.float32)
             point_set[:, 0:3] = pc_normalize(point_set[:, 0:3])
-            point_set = np.concatenate((point_set[:, 0:7],point_set[:, -2:]),axis=1) #atom
 
 
             if not self.use_res:
@@ -473,9 +411,9 @@ class DataLoaderForHitOnComplex(Dataset):
     def __getitem__(self, index):
         return self._get_item(index)
 
-def collate_fn(batch,npoints):
+def collate_fn(batch):
     f_num = batch[0][0].shape[1]
-    max_natoms = npoints
+    max_natoms = 1000
     labels = []
     point_set = np.zeros((len(batch), max_natoms, f_num))
 
@@ -490,9 +428,9 @@ def collate_fn(batch,npoints):
     return point_set,labels,max_natoms
 
 
-def collate_fn_hit(batch,npoints):
+def collate_fn_hit(batch):
     f_num = batch[0][0].shape[1]
-    max_natoms = npoints
+    max_natoms = 1000
     labels = []
     paths = []
     point_set = np.zeros((len(batch), max_natoms, f_num))
@@ -511,6 +449,5 @@ def collate_fn_hit(batch,npoints):
 
 if __name__ == '__main__':
     import torch
-    data_all = DataLoaderForCV('C:\\Users\\cxhrzh\\Desktop\\PointDock\\Data\\dockground61_1000', npoint=1000)
-    TRAIN_DATASET ,VALID_DATASET ,TEST_DATASET = data_all.get_cv_dataloader_use_txt('C:\\Users\\cxhrzh\\Desktop\\PointDock\\set.txt',1)
-    print(TRAIN_DATASET.get_complex_names())
+    data_all = DataLoaderForCV('C:\\Users\\cxhrzh\\Desktop\\PointScore\\Data\\dockground61_1000', npoint=1000)
+    TRAIN_DATASET ,VALID_DATASET ,TEST_DATASET = data_all.get_cv_dataloader_use_txt('C:\\Users\\cxhrzh\\Desktop\\PointScore\\dockground_split.txt',1)

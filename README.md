@@ -16,7 +16,7 @@ Protein-protein interactions (PPIs) play essential roles in maintain life. Due t
  - scikit-learn
 
 ## Installation  
-### 1. [`Install git`](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git) 
+### 1. [`Install Git`](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git) 
 ### 2. Clone the repository in your computer 
 ```
 git clone https://github.com/AI-ProteinGroup/PointScore && cd PointScore
@@ -28,6 +28,10 @@ conda create -n PointScore python=3.6
 conda activate PointScore
 pip install -r requirements.txt 
 ```
+
+### 4. [`Download Models`](https://drive.google.com/file/d/1A1pfBNUdmkS0iG4KJgAtfb50LE8PIf2Q/view?usp=sharing)
+
+That downloads the models for cross-validation on DOCKGROUND.
 
 ## Usage
 ```
@@ -67,7 +71,7 @@ dataset dir
 
 ### 2 Train Model
 ```
-python main.py --data_dir [data_dir] --gpu=[gpu_id] --batch_size [batch_size] --checkpoint [checkpoint_dir]
+python train.py --data_dir [data_dir] --gpu=[gpu_id] --batch_size [batch_size] --checkpoint [checkpoint_dir]
 ```
 main.py should specify a file preprocessed by preprocess.py; --gpu is used to specify the gpu id; trianing model will be saved in [checkpoint_dir].
 
