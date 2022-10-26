@@ -34,19 +34,6 @@ pip install -r requirements.txt
 That downloads the models for cross-validation on DOCKGROUND.
 
 ## Usage
-```
-python3 main.py
-  -h, --help            show this help message and exit
-  --gpu GPU             Choose gpu id, example: '0,1'(specify use gpu 0 and 1)
-  --batch_size          batch_size
-  --dropout_rate        dropout_rate
-  --data_dir            dataset dir
-  --log_dir             log save dir
-  --seed                random seed for shuffling
-  --fold               specify fold model for prediction
-  --checkpoint          model checkpoint save dir
-```
-
 ### 1 Preprocess Data
 ```
 python preprocess.py --p_num [process_number] --npoint [N] --dataset_dir [dataset_dir] --data_sv_dir [special_data_dir]
