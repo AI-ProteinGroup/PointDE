@@ -49,7 +49,7 @@ python3 main.py
 
 ### 1 Preprocess Data
 ```
-python preprocess.py --p_num [process_number] --npoint {N} --dataset_dir [dataset_dir] --data_sv_dir [special_data_dir]
+python preprocess.py --p_num [process_number] --npoint [N] --dataset_dir [dataset_dir] --data_sv_dir [special_data_dir]
 ```
 preprocessing should specify a pdb file with Receptor chain ID 'A' and ligand chain ID 'B'. pdb file must be in a folder named PDB ID. num_workers is used to specify the number of theads to process data.
 
@@ -71,7 +71,7 @@ dataset dir
 
 ### 2 Train Model
 ```
-python train.py --data_dir [data_dir] --gpu=[gpu_id] --batch_size [batch_size] --checkpoint [checkpoint_dir]
+python train.py --data_dir [data_dir] --gpu=[gpu_id] --batch_size [batch_size] --checkpoint [save_checkpoint_dir]
 ```
 main.py should specify a file preprocessed by preprocess.py; --gpu is used to specify the gpu id; trianing model will be saved in [checkpoint_dir].
 
