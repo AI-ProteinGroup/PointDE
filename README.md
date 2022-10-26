@@ -29,7 +29,7 @@ conda activate PointScore
 pip install -r requirements.txt 
 ```
 
-### 4. [`Download Models`](https://drive.google.com/file/d/1A1pfBNUdmkS0iG4KJgAtfb50LE8PIf2Q/view?usp=sharing)
+### 4. [`Download Models`](https://drive.google.com/file/d/13HSlVYjQwyhoHdQNLDt91eKSG4zwpWeN/view?usp=sharing)
 
 That downloads the models for cross-validation on DOCKGROUND.
 
@@ -62,12 +62,22 @@ python train.py --data_dir [data_dir] --gpu=[gpu_id] --batch_size [batch_size] -
 ```
 main.py should specify a file preprocessed by preprocess.py; --gpu is used to specify the gpu id; trianing model will be saved in [checkpoint_dir].
 
-### 2 Evaluate protein complex
+The models for cross-validation on DOCKGROUND [`here`](https://drive.google.com/file/d/13HSlVYjQwyhoHdQNLDt91eKSG4zwpWeN/view?usp=sharing).
+
+### 3 Evaluate protein complex
 ```
 python eval_ssr.py --gpu=[gpu_id] --fold [fold] --data_dir [data_dir] --sv_dir [sv_dir] 
 ```
 eval_ssr.py should specify the directory that inclues pdb files with Receptor chain ID 'A' and ligand chain ID 'B'; --fold should specify the fold model you will use, where -1 denotes that you want to use the average prediction of 4 fold models and 1,2,3,4 will choose different model for predictions.
 The output will be kept in [ssr_sv/{sv_dir}]. The prediction results will be kept in {PDB ID}.txt.   
+
+## Dataset
+
+### 1 DOCKGROUND [`link`](http://dockground.compbio.ku.edu/)
+
+### 2 CAPRI socre_set [`link`](http://cb.iri.univ-lille1.fr/Users/lensink/Score_set/)
+
+### 3 Antibody-Antigen benchmark [`link`](https://drive.google.com/file/d/1AIMgbbYovESTOvqu7qqqEG24BKgrtkXh/view?usp=sharing)
 
 ## Result 
 ### Performance on Dockground Dataset
