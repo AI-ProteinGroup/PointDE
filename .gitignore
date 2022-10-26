@@ -1,5 +1,7 @@
 checkpoint/*
 !checkpoint/.gitkeep
 data/*
+ssr_sv
+dockground61
 !data/.gitkeep
 __pycache__

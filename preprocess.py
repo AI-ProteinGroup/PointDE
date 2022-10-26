@@ -1,4 +1,10 @@
+"""
+Usage:
+python eval_ssr.py --p_num {process_number} --npoint {N} --dataset_dir {dataset_dir} --data_sv_dir {data_save_dir}
+"""
 import os
+import sys
+import argparse
 from re import L
 import numpy as np
 import operator
@@ -8,13 +14,178 @@ from sklearn.preprocessing import OneHotEncoder
 from multiprocessing import Pool
 from multiprocessing import cpu_count
 from tqdm import trange
+import utils.provider as provider
 
 
-N = 1000
-processor = 24
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+ROOT_DIR = BASE_DIR
+sys.path.append(os.path.join(ROOT_DIR, 'model'))
+sys.path.append(os.path.join(ROOT_DIR,'utils'))
 
-input_dir = '/home/cxhrzh/chenzihao/dockground61'
-output_dir = '/home/cxhrzh/dockground61_1000'
+
+
+def parse_args():
+    '''PARAMETERS'''
+    parser = argparse.ArgumentParser('pre-processing')
+    parser.add_argument('--p_num', type=int, default=24, help='processor number [default: 24]')
+    parser.add_argument('--npoint', type=int, default=1000, help='Point cloud total number [default: 1000]')
+    parser.add_argument('--dataset_dir', type=str, default='dockground61', help='Dataset dir [format is shown in README]')
+    parser.add_argument('--data_folder', type=str, default='data', help='Data dir [default: data]')
+    parser.add_argument('--data_sv_dir', type=str, default='dockground61_1000', help='Special Data save dir')
+    parser.add_argument('--error_dir', type=str, default='error', help='Error message save dir')
+    parser.add_argument('--normal', action='store_true', default=True, help='Whether to use normal information [default: True]')
+    parser.add_argument('--seed', type=int, default=1024, help='random seed')
+
+    return parser.parse_args()
+    
+
+def Extract_Interface(pdb_path):
+    """
+    Input:
+        pdb_path: pdb_path
+    Return:
+        final_receptor: list of all recptor atom lines
+        final_ligand: list of all ligand atom lines
+    """
+    receptor_list=[]
+    ligand_list=[]
+    rlist=[]
+    llist=[]
+    count_r=0
+    count_l=0
+    with open(pdb_path,'r') as file:
+        line = file.readline()               # call readline()
+        while line[0:4]!='ATOM':
+            line=file.readline()
+        atomid = 0
+        count = 1
+        goon = False
+        chain_id = line[21]
+        first_chain_id = chain_id
+        residue_type = line[17:20]
+        pre_residue_type = residue_type
+        tmp_list = []
+        pre_residue_id = 0
+        pre_chain_id = line[21]
+        first_change=True
+        while line:
+
+            dat_in = line[0:80].split()
+            if len(dat_in) == 0:
+                line = file.readline()
+                continue
+
+            if (dat_in[0] == 'ATOM'):
+                chain_id = line[21]
+                residue_id = int(line[23:26])
+
+                x = float(line[30:38])
+                y = float(line[38:46])
+                z = float(line[46:54])
+                residue_type = line[17:20]
+                # First try CA distance of contact map
+                atom_type = line[13:16].strip()
+                if chain_id!=first_chain_id:
+                    goon=True
+                if (goon):
+                    if first_change:
+                        rlist.append(tmp_list)
+                        tmp_list = []
+                        tmp_list.append([x, y, z, atom_type, count_l])
+                        count_l += 1
+                        ligand_list.append(line)
+                        first_change=False
+                    else:
+                        ligand_list.append(line)  # used to prepare write interface region
+                        if pre_residue_type == residue_type:
+                            tmp_list.append([x, y, z, atom_type, count_l])
+                        else:
+                            llist.append(tmp_list)
+                            tmp_list = []
+                            tmp_list.append([x, y, z, atom_type, count_l])
+                        count_l += 1
+                else:
+                    receptor_list.append(line)
+                    if pre_residue_type == residue_type:
+                        tmp_list.append([x, y, z, atom_type, count_r])
+                    else:
+                        rlist.append(tmp_list)
+                        tmp_list = []
+                        tmp_list.append([x, y, z, atom_type, count_r])
+                    count_r += 1
+
+                atomid = int(dat_in[1])
+                chain_id = line[21]
+                count = count + 1
+                pre_residue_type = residue_type
+                pre_residue_id = residue_id
+                pre_chain_id = chain_id
+            line = file.readline()
+    print("Extracting %d/%d atoms for receptor, %d/%d atoms for ligand"%(len(receptor_list),count_r,len(ligand_list),count_l))
+    final_receptor, final_ligand=Form_interface(rlist,llist,receptor_list,ligand_list)
+
+    return final_receptor,final_ligand
+
+def Form_interface(rlist,llist,receptor_list,ligand_list,cut_off=10):
+    """
+    Input:
+        rlist: list of all recptor residual
+        llist: list of all recptor residual
+        receptor_list: list of all recptor atom lines
+        ligand_list: list of all recptor atom lines
+        cut_off: cut off disatance (default: 10 A)
+    Return:
+        final_receptor: list of all cut off recptor atom lines
+        final_ligand: list of all cut off ligand atom lines
+    """
+    cut_off=cut_off**2
+    r_index=set()
+    l_index=set()
+    for rindex,item1 in enumerate(rlist):
+        for lindex,item2 in enumerate(llist):
+            min_distance=1000000
+            residue1_len=len(item1)
+            residue2_len=len(item2)
+            for m in range(residue1_len):
+                atom1=item1[m]
+                for n in range(residue2_len):
+                    atom2=item2[n]
+                    distance=0
+                    for k in range(3):
+                        distance+=(atom1[k]-atom2[k])**2
+                    #distance=np.linalg.norm(atom1[:3]-atom2[:3])
+                    if distance<=min_distance:
+                        min_distance=distance
+            if min_distance<=cut_off:
+                if rindex not in r_index:
+                    r_index.add(rindex)
+                if lindex not in l_index:
+                    l_index.add(lindex)
+    r_index=list(r_index)
+    l_index=list(l_index)
+    newrlist=[]
+    for k in range(len(r_index)):
+        newrlist.append(rlist[r_index[k]])
+    newllist=[]
+    for k in range(len(l_index)):
+        newllist.append(llist[l_index[k]])
+    print("After filtering the interface region, %d/%d residue in receptor, %d/%d residue in ligand" % (len(newrlist),len(rlist), len(newllist),len(llist)))
+    #get the line to write new interface file
+    final_receptor=[]
+    final_ligand=[]
+    for residue in newrlist:
+        for tmp_atom in residue:
+            our_index=tmp_atom[4]
+            final_receptor.append(receptor_list[our_index])
+
+    for residue in newllist:
+        for tmp_atom in residue:
+            our_index=tmp_atom[4]
+            #print (our_index)
+            final_ligand.append(ligand_list[our_index])
+    print("After filtering the interface region, %d receptor, %d ligand"%(len(final_receptor),len(final_ligand)))
+
+    return final_receptor,final_ligand
 
 def get_atom_list_from_pdb(chain,chain_type):
     """
@@ -32,15 +203,15 @@ def get_atom_list_from_pdb(chain,chain_type):
         _atom= atom.values.tolist()
         #x, y, z = [ float(x) for x in [atom.x,atom.y,atom.z]]
         atom_name = str(_atom[2]).strip()
-        resName = str(_atom[3]).strip()
-        resID = str(_atom[5]).strip()
+        res_name = str(_atom[3]).strip()
+        res_id = str(_atom[5]).strip()
         x = float(str(_atom[6]).strip())
         y = float(str(_atom[7]).strip())
         z = float(str(_atom[8]).strip())
         #print(x,y,z)
         if atom_name not in ATOM_TYPE:
             atom_name = 'Others'
-        atom_tuple = [x,y,z,atom_name,resName,resID,chain_type,index]
+        atom_tuple = [x,y,z,atom_name,res_name,res_id,chain_type,index]
         atom_list.append(atom_tuple)
     
     print('in {} has {} atoms'.format(choice[chain_type],len(atom_list)))
@@ -148,7 +319,7 @@ def encode_atom_list(r_list,l_list,is_atom_list=False):
         new_list.append(new_row)
     return new_list
 
-def process_pdb_file_by_atom_N(input_pdb_file,sv_pdb_file,chian_id_1='A',chian_id_2='B',fix_atom_num=1024):
+def process_pdb_file_by_atom_N(input_pdb_file,sv_pdb_file,chian_id_1='A',chian_id_2='B',npoint=1000,med_out=False):
     """
     Input:
         input_pdb_file: input protein file (.pdb type)
@@ -160,119 +331,89 @@ def process_pdb_file_by_atom_N(input_pdb_file,sv_pdb_file,chian_id_1='A',chian_i
         e_list: an encoder atom list, inclue [x,y,z,one-hot-res-type,one-hot-atom-type]
     """
     RES_TYPE_ORIGIN = ['ALA', 'ARG', 'ASN', 'ASP', 'CYS', 'GLN', 'GLU', 'GLY', 'HIS', 'ILE', 'LEU', 'LYS', 'MET', 'PHE', 'PRO', 'SER', 'THR', 'TRP', 'TYR', 'VAL']
-    ATOM_TYPE_ORIGIN = ['C','N','O','Others']
     #Open a pdb file
-    metas =[]
-    with open(input_pdb_file,'r') as f:
-        for line in f.readlines():
-            line = line.strip()
-            if line[0:4] =="ATOM":
-                s = line[54:-1]
-                s = s.replace('2CLR','  ')
-                metas.append([line[0:6],line[6:11],line[12:16],line[17:20],line[21],line[22:26],line[30:38],line[38:46],line[46:54],s])
-    #print(len(metas))
-    a = np.array([np.array(x) for x in metas])
-    #print(a.shape)
+    final_receptor,final_ligand = Extract_Interface(input_pdb_file)
+
+    if med_out:
+        pass
+
+    r_atom_list = []
+    l_atom_list = []
+    for line in final_receptor:
+        line = line.strip()
+        if line[0:4] =="ATOM":
+            sep = line[54:-1]
+            sep = sep.replace('2CLR','  ')
+            r_atom_list.append([line[0:6],line[6:11],line[12:16],line[17:20],line[21],line[22:26],line[30:38],line[38:46],line[46:54],sep])
+
+    for line in final_ligand:
+        line = line.strip()
+        if line[0:4] =="ATOM":
+            sep = line[54:-1]
+            sep = sep.replace('2CLR','  ')
+            l_atom_list.append([line[0:6],line[6:11],line[12:16],line[17:20],line[21],line[22:26],line[30:38],line[38:46],line[46:54],sep])
     
     #To DataFrame
-    columns = ["atom","atomID","atomName","resName","chainID","resID","x","y","z","others"]
-    data = pd.DataFrame(a,columns=columns)
-    #print(data.resName.unique())
-    data['resName'] = np.where(data['resName']=='MSE','MET', data['resName'])
-    #print(data.resName.unique())
-    data = data[data.resName.isin(RES_TYPE_ORIGIN)].copy()
-    data.index = range(len(data))
-    #print(data.shape[0])
+    columns = ["atom","atom_id","atom_name","res_name","chain_id","res_id","x","y","z","others"]
+    data_r = pd.DataFrame(r_atom_list,columns=columns)
+    data_l = pd.DataFrame(l_atom_list,columns=columns)
     
-    #Get chains
-    chain_1 = data[data.chainID.isin(chian_id_1)].copy()
-    chain_2 = data[data.chainID.isin(chian_id_2)].copy()
+    #print(data.resName.unique())
+    data_r['res_name'] = np.where(data_r['res_name']=='MSE','MET', data_r['res_name'])
+    data_l['res_name'] = np.where(data_l['res_name']=='MSE','MET', data_l['res_name'])
+    #print(data.resName.unique())
+
+    data_r = data_r[data_r['res_name'].isin(RES_TYPE_ORIGIN)].copy()
+    data_r.index = range(len(data_r))
+
+    data_l = data_l[data_l['res_name'].isin(RES_TYPE_ORIGIN)].copy()
+    data_l.index = range(len(data_l))
 
     #Covert DataFram as list
-    atom_1_list = get_atom_list_from_pdb(chain_1, "R")
-    atom_2_list = get_atom_list_from_pdb(chain_2, "L")
+    atom_r_list = get_atom_list_from_pdb(data_r, "R")
+    atom_l_list = get_atom_list_from_pdb(data_l, "L")
 
     #Get cutoff interface receptor/ligrand atom
-    r_list , l_list=get_interface_from_atom_N(atom_1_list,atom_2_list,fix_atom_num//2)
+    fix_r_list , fix_l_list = get_interface_from_atom_N(atom_r_list,atom_l_list,npoint//2)
 
-    #Recovery cutoff pdb file
-    index = []
-    for atom in (r_list):
-        index.append(atom[-1])
-    for atom in l_list:
-        index.append(atom[-1])
-    index.sort()
-    #print(index)
+    if med_out:
+        pass
 
-    cutoff_chain = data.iloc[index,:]
-    '''
-    with open(sv_pdb_file,'w+') as wf:
-        for index, atom in cutoff_chain.iterrows():
-            j= atom.values.tolist()
-            j = [_.strip() for _ in j]
-            j[0] = j[0].ljust(6)#atom#6s
-            j[1] = j[1].rjust(5)#aomnum#5d
-            j[2] = j[2].center(4)#atomname$#4s
-            j[3] = j[3].ljust(3)#resname#1s
-            j[4] = j[4].rjust(1) #Astring
-            j[5] = j[5].rjust(4) #resnum
-            j[6] = str('%8.3f' % (float(j[6]))).rjust(8) #x
-            j[7] = str('%8.3f' % (float(j[7]))).rjust(8)#y
-            j[8] = str('%8.3f' % (float(j[8]))).rjust(8) #z\
-            # j[11]=j[11].rjust(12)#elname    
-            wf.write("%s%s %s %s %s%s    %s%s%s %s\n"% (j[0],j[1],j[2],j[3],j[4],j[5],j[6],j[7],j[8],j[9]))
-    '''
-    
-    '''
-    #padding
-    r_num = len(r_list)
-    l_num = len(l_list)
-    for i in range(fix_atom_num//2-r_num):
-        r_list.append(r_list[-1])
-
-    for i in range(fix_atom_num//2-l_num):
-        l_list.append(l_list[-1])
-    '''
-    #print(len(r_list))
-    #print(len(l_list))
-    
-    #Encode interfacec atom list
-    e_list = encode_atom_list(r_list,l_list,is_atom_list=True)
+    e_list = encode_atom_list(fix_r_list,fix_l_list,is_atom_list=True)
     
     #padding 0
-    r_num = len(r_list)
-    l_num = len(l_list)
+    r_num = len(fix_r_list)
+    l_num = len(fix_l_list)
     line_shape = e_list[0].shape
-    r_list_new = e_list[:r_num]
-    l_list_new = e_list[r_num:]
+    r_list_encode = e_list[:r_num]
+    l_list_encode = e_list[r_num:]
     
-    for i in range(fix_atom_num//2-r_num):
-        r_list_new.append(np.zeros(line_shape))
+    for i in range(npoint//2-r_num):
+        r_list_encode.append(np.zeros(line_shape))
 
-    for i in range(fix_atom_num//2-l_num):
-        l_list_new.append(np.zeros(line_shape))
+    for i in range(npoint//2-l_num):
+        l_list_encode.append(np.zeros(line_shape))
 
-    return r_list_new+l_list_new
+    return r_list_encode+l_list_encode
 
-def preprocess_pdb_file_fix_atom(input_pdb_file_path,sv_name,sv_data_folder_path,sv_pdb_folder_path,atom_num,type='txt'):
+def preprocess_one_pdb_file(input_pdb_file_path,sv_name,sv_data_folder_path,npoint,type='txt'):
     """
     Input:
         input_pdb_file: input protein file (.pdb type)
         sv_name: save file name
         sv_data_folder_path: output data file folder (.txt type or .npz type)
-        sv_pdb_folder_path: output protein file folder (.pdb type)
         atom_num: fix atom number
         type: 'txt' or 'npz'
     """
-    sv_pdb_file_path = os.path.join(sv_pdb_folder_path,sv_name)
-    encode_interface_list = process_pdb_file_by_atom_N(input_pdb_file_path,sv_pdb_file_path,['A'],['B'],atom_num)
-    point = np.array(encode_interface_list)
+    sv_pdb_file_path = os.path.join(sv_data_folder_path,sv_name)
+    output_point_cloud_data = process_pdb_file_by_atom_N(input_pdb_file_path,sv_pdb_file_path,['A'],['B'],npoint)
+    point = np.array(output_point_cloud_data)
     if type=='txt':
         np.savetxt(os.path.join(sv_data_folder_path,sv_name[:-4]+'.txt'),point,delimiter=' ')
     else:
         np.savez(os.path.join(sv_data_folder_path,sv_name[:-4]+'.npz'),point=point)
 
-def single_worker_by_id(pdb_id_list,input_dir,output_dir):
+def single_worker_by_pdb_id_list(pdb_id_list,input_dir,output_dir,npoint):
     """
     A process for preprocess pdb file
     An input file folder as:
@@ -294,9 +435,9 @@ def single_worker_by_id(pdb_id_list,input_dir,output_dir):
         pdb_case_list=[x for x in os.listdir(input_path) if ".pdb" in x]
         for caseid in pdb_case_list:
             input_pdb_path=os.path.join(input_path,caseid)
-            preprocess_pdb_file_fix_atom(input_pdb_path,caseid,data_output_path,pdb_output_path,N)
+            preprocess_one_pdb_file(input_pdb_path,caseid,data_output_path,pdb_output_path,npoint)
 
-def single_worker_by_file(pdb_file_list,input_dir,output_dir,p_number):
+def single_worker_by_file_list(pdb_file_list,input_dir,output_dir,error_dir,p_number,npoint):
     """
     A process for preprocess pdb file
     An input file folder as:
@@ -310,12 +451,13 @@ def single_worker_by_file(pdb_file_list,input_dir,output_dir,p_number):
         for i in trange(len(pdb_file_list)):
             pdb_id,caseid = pdb_file_list[i]
             input_path =  os.path.join(input_dir,pdb_id)
-            data_output_path = os.path.join(output_dir,'txt',pdb_id)
-            pdb_output_path = os.path.join(output_dir,'pdb',pdb_id)
-            input_pdb_path=os.path.join(input_path,caseid)
-            preprocess_pdb_file_fix_atom(input_pdb_path,caseid,data_output_path,pdb_output_path,N)
+            input_pdb_path= os.path.join(input_path,caseid)
+            output_path = os.path.join(output_dir,pdb_id)
+            if not os.path.exists(output_path):
+                os.mkdir(output_path)
+            preprocess_one_pdb_file(input_pdb_path,caseid,output_path,npoint)
     except Exception as e:
-        with open('/home/mxp/chenzihao/error/{}.txt'.format(p_number),'w+') as f:
+        with open(os.path.join(error_dir,'p_{}.txt'.format(p_number)),'w+') as f:
             print("in No.{} process, exception occurred".format(p_number))
             print("in {}/{}".format(pdb_id,caseid))
             print(str(e))
@@ -323,45 +465,44 @@ def single_worker_by_file(pdb_file_list,input_dir,output_dir,p_number):
             f.write("in {}/{}\n".format(pdb_id,caseid))
             f.write(str(e))
 
-if __name__ == '__main__':
-    txt_output_path = os.path.join(output_dir,'txt')
-    pdb_output_path = os.path.join(output_dir,'pdb')
-    if not os.path.exists(output_dir):
-        os.mkdir(output_dir)
-    if not os.path.exists(txt_output_path):
-        os.mkdir(txt_output_path)
-    if not os.path.exists(pdb_output_path):
-        os.mkdir(pdb_output_path)
+def main():
+    args = parse_args()
+    provider.set_seed(args.seed)
 
-    pdb_id_list = os.listdir(input_dir)
-    
-    for pdb_id in pdb_id_list:
-        data_output_path = os.path.join(output_dir,'txt',pdb_id)
-        pdb_output_path = os.path.join(output_dir,'pdb',pdb_id)
-        if not os.path.exists(data_output_path):
-            os.mkdir(data_output_path)
-        if not os.path.exists(pdb_output_path):
-            os.mkdir(pdb_output_path)
+    DATASET_PATH = os.path.join(ROOT_DIR,args.dataset_dir)
+    DATA_PATH = os.path.join(ROOT_DIR,args.data_folder)
+    ERROR_PATH = os.path.join(ROOT_DIR,args.error_dir)
 
-    num_cores = cpu_count()
+    if not os.path.exists(ERROR_PATH):
+        os.mkdir(ERROR_PATH)
+    if not os.path.exists(DATA_PATH):
+        os.mkdir(DATA_PATH)
+    DATA_SV_PATH = os.path.join(DATA_PATH,args.data_sv_dir)
+    if not os.path.exists(DATA_SV_PATH):
+        os.mkdir(DATA_SV_PATH)
 
+    pdb_id_list = os.listdir(DATASET_PATH)
     pdb_file_list = []
     for pdb_id in pdb_id_list:
-        caseid_list = os.listdir(os.path.join(input_dir,pdb_id))
+        caseid_list = os.listdir(os.path.join(DATASET_PATH,pdb_id))
+        caseid_list = [x for x in caseid_list if x.endswith('.pdb')]
         for caseid in caseid_list:
             pdb_file_list.append([pdb_id,caseid])
     
     number_pdb_file = len(pdb_file_list)
-
-
-    p = Pool(processor)
     print("total file numbers: {}".format(number_pdb_file))
-    n = number_pdb_file//processor +1
-    for i in range(processor):
-        start = n*i
-        end = number_pdb_file if i==processor-1 else n*(i+1)
+
+
+    process_pool = Pool(args.p_num)
+    n = number_pdb_file//args.p_num +1
+    for p_id in range(args.p_num):
+        start = n*p_id
+        end = number_pdb_file if p_id==args.p_num-1 else n*(p_id+1)
         pdb_sub_list = pdb_file_list[start:end]
-        print(start,end)
-        p.apply_async(single_worker_by_file,args=(pdb_sub_list, input_dir, output_dir,i))
-    p.close()
-    p.join()
+        process_pool.apply_async(single_worker_by_file_list,args=(pdb_sub_list, DATASET_PATH, DATA_SV_PATH, ERROR_PATH, p_id, args.npoint))
+    process_pool.close()
+    process_pool.join()
+
+
+if __name__ == '__main__':
+    main()
