@@ -1,6 +1,6 @@
 """
 Usage:
-python eval_ssr.py --p_num {process_number} --npoint {N} --dataset_dir {dataset_dir} --data_sv_dir {data_save_dir}
+python preprocess.py --p_num {process_number} --npoint {N} --dataset_dir {dataset_dir} --data_sv_dir {data_save_dir}
 """
 import os
 import sys
@@ -15,7 +15,8 @@ from multiprocessing import Pool
 from multiprocessing import cpu_count
 from tqdm import trange
 import utils.provider as provider
-
+RESIDUE_Forbidden_SET={"FAD"}
+CUT_OFF=8
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = BASE_DIR
@@ -23,20 +24,37 @@ sys.path.append(os.path.join(ROOT_DIR, 'model'))
 sys.path.append(os.path.join(ROOT_DIR,'utils'))
 
 
+MED_OUT_PATH = os.path.join(ROOT_DIR,'dockground61_interface')
+if not os.path.exists(MED_OUT_PATH):
+    os.mkdir(MED_OUT_PATH)
+
+
 
 def parse_args():
     '''PARAMETERS'''
     parser = argparse.ArgumentParser('pre-processing')
-    parser.add_argument('--p_num', type=int, default=24, help='processor number [default: 24]')
+    parser.add_argument('--p_num', type=int, default=20, help='processor number [default: 24]')
     parser.add_argument('--npoint', type=int, default=1000, help='Point cloud total number [default: 1000]')
     parser.add_argument('--dataset_dir', type=str, default='dockground61', help='Dataset dir [format is shown in README]')
     parser.add_argument('--data_folder', type=str, default='data', help='Data dir [default: data]')
     parser.add_argument('--data_sv_dir', type=str, default='dockground61_1000', help='Special Data save dir')
     parser.add_argument('--error_dir', type=str, default='error', help='Error message save dir')
     parser.add_argument('--normal', action='store_true', default=True, help='Whether to use normal information [default: True]')
-    parser.add_argument('--seed', type=int, default=1024, help='random seed')
+    parser.add_argument('--cutoff', type=int, default=8, help='cutoff') #todo
+    parser.add_argument('--seed', type=int, default=1024, help='random seed') 
 
     return parser.parse_args()
+
+def Write_Interface(line_list,pdb_path,ext_file):
+    new_path=pdb_path[:-4]+ext_file
+    with open(new_path,'w') as file:
+        for line in line_list:
+            #check residue in the common residue or not. If not, no write for this residue
+            residue_type = line[17:20]
+            if residue_type in RESIDUE_Forbidden_SET:
+                continue
+            file.write(line)
+    return new_path
     
 
 def Extract_Interface(pdb_path):
@@ -126,7 +144,7 @@ def Extract_Interface(pdb_path):
 
     return final_receptor,final_ligand
 
-def Form_interface(rlist,llist,receptor_list,ligand_list,cut_off=10):
+def Form_interface(rlist,llist,receptor_list,ligand_list,cut_off=CUT_OFF):
     """
     Input:
         rlist: list of all recptor residual
@@ -319,7 +337,7 @@ def encode_atom_list(r_list,l_list,is_atom_list=False):
         new_list.append(new_row)
     return new_list
 
-def process_pdb_file_by_atom_N(input_pdb_file,sv_pdb_file,chian_id_1='A',chian_id_2='B',npoint=1000,med_out=False):
+def process_pdb_file_by_atom_N(input_pdb_file,sv_pdb_file,chian_id_1='A',chian_id_2='B',npoint=1000,med_out=True):
     """
     Input:
         input_pdb_file: input protein file (.pdb type)
@@ -335,7 +353,11 @@ def process_pdb_file_by_atom_N(input_pdb_file,sv_pdb_file,chian_id_1='A',chian_i
     final_receptor,final_ligand = Extract_Interface(input_pdb_file)
 
     if med_out:
-        pass
+        pdb_id = input_pdb_file.split(os.path.sep)[-2]
+        pdb_name = input_pdb_file.split(os.path.sep)[-1]
+        if not os.path.exists(os.path.join(MED_OUT_PATH,pdb_id)):
+            os.mkdir(os.path.join(MED_OUT_PATH,pdb_id))
+        Write_Interface(final_receptor+final_ligand,os.path.join(MED_OUT_PATH,pdb_id,pdb_name),".pdb")
 
     r_atom_list = []
     l_atom_list = []
@@ -480,6 +502,7 @@ def main():
     DATA_SV_PATH = os.path.join(DATA_PATH,args.data_sv_dir)
     if not os.path.exists(DATA_SV_PATH):
         os.mkdir(DATA_SV_PATH)
+
 
     pdb_id_list = os.listdir(DATASET_PATH)
     pdb_file_list = []

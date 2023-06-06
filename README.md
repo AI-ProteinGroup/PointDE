@@ -14,6 +14,7 @@ Protein-protein interactions (PPIs) play essential roles in many vital movements
  - Python 3.6
  - Torch 1.5.1
  - scikit-learn
+ - torchsampler
 
 ## Installation  
 ### 1. [`Install Git`](https://git-scm.com/book/en/v2/Getting-Started-Installing-Git) 
@@ -29,7 +30,7 @@ conda activate PointDE
 pip install -r requirements.txt 
 ```
 
-### 4. [`Download Models`](https://drive.google.com/file/d/13HSlVYjQwyhoHdQNLDt91eKSG4zwpWeN/view?usp=sharing)
+### 4. [`Download Pretrained Models (Option)`](https://drive.google.com/file/d/13HSlVYjQwyhoHdQNLDt91eKSG4zwpWeN/view?usp=sharing)
 
 That downloads the models for cross-validation on DOCKGROUND.
 
@@ -57,18 +58,22 @@ dataset dir
 ```
 
 ### 2 Train Model
-```
-python train.py --data_dir [data_dir] --gpu=[gpu_id] --batch_size [batch_size] --checkpoint [save_checkpoint_dir]
-```
-main.py should specify a file preprocessed by preprocess.py; --gpu is used to specify the gpu id; trianing model will be saved in [checkpoint_dir].
 
-The models for cross-validation on DOCKGROUND [`here`](https://drive.google.com/file/d/13HSlVYjQwyhoHdQNLDt91eKSG4zwpWeN/view?usp=sharing).
+```
+python train.py --data_dir [data_dir] --gpu=[gpu_id] --batch_size [batch_size] --checkpoint [checkpoint_dir]
+```
+
+After preprocessing the data, you are responsible for generating the division of training and testing data in the format specified in "document/training_annotation_example". Please ensure that you place these files in the preprocessed dataset folder.
+
+main.py should specify a file preprocessed by preprocess.py; "gpu_id" is used to specify the gpu id; trianing model will be saved in "checkpoint_dir". "data_dir" is the path saved in the previous step "data_sv_dir".
+
+The  models for cross-validation on DOCKGROUND [`here`](https://drive.google.com/file/d/13HSlVYjQwyhoHdQNLDt91eKSG4zwpWeN/view?usp=sharing).
 
 ### 3 Evaluate protein complex
 ```
-python eval_ssr.py --gpu=[gpu_id] --fold [fold] --data_dir [data_dir] --sv_dir [sv_dir] 
+python eval.py --gpu=[gpu_id] --fold [fold] --data_dir [data_dir] --sv_dir [sv_dir] 
 ```
-eval_ssr.py should specify the directory that inclues pdb files with Receptor chain ID 'A' and ligand chain ID 'B'; --fold should specify the fold model you will use, where -1 denotes that you want to use the average prediction of 4 fold models and 1,2,3,4 will choose different model for predictions.
+eval.py should specify the directory that inclues pdb files with Receptor chain ID 'A' and ligand chain ID 'B'; --fold should specify the fold model you will use, where -1 denotes that you want to use the average prediction of 4 fold models and 1,2,3,4 will choose different model for predictions.
 The output will be kept in [ssr_sv/{sv_dir}]. The prediction results will be kept in {PDB ID}.txt.   
 
 ## Dataset
@@ -88,10 +93,5 @@ The output will be kept in [ssr_sv/{sv_dir}]. The prediction results will be kep
 ### Performance on Antibody-Antigen dataset
 <p align="center">
   <img src="figure/Figure_4.png" alt="network" width="80%">
-</p>
-
-### T-SNE analysis
-<p align="center">
-  <img src="figure/Figure_5.png" alt="network" width="80%">
 </p>
 

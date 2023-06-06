@@ -1,6 +1,6 @@
 """
 author:hao
-date:16/10/2020
+date:10/16/2022
 
 point cloud data preprocessing
 """
@@ -126,42 +126,27 @@ def farthest_point_sample(point, npoint):
     return point
 
 
-class PPI4DOCKDataLoader(Dataset):
-    def __init__(self, root,  npoint=720, split='train', uniform=False, normal_channel=True, cache_size=15000,use_ph=False):
+class DataLoader(Dataset):
+    def __init__(self, root, split='train',use_res=True,use_more_class=False):
         self.root = root
-        self.npoints = npoint
-        self.uniform = uniform
-        self.catfile = os.path.join(self.root, 'class.txt')
-        self.use_ph =use_ph
-        if self.use_ph:
-            ph_table = pd.read_csv(os.path.join(self.root, 'physicochemical_class_onehot.csv'),index_col=0)
-            self.ph_table = ph_table.values
+        self.use_res = use_res
+        self.use_more_class = use_more_class
 
-        self.cat = [line.rstrip() for line in open(self.catfile)]
+        self.cat = []
+        if self.use_more_class: 
+            self.catfile = os.path.join(self.root, 'class.txt') #incorrect,acceptable,medium,high
+            self.cat = [line.rstrip() for line in open(self.catfile)]
+        else:
+            self.cat = ["negtive","positive"]
         self.classes = dict(zip(self.cat, range(len(self.cat))))
-        #print(self.classes['postive'])
-        self.normal_channel = normal_channel
 
         data_paths = {}
-        #data_paths['train'] = [line.rstrip() for line in open(os.path.join(self.root, 'train.txt'))]
-        #data_paths['valid'] = [line.rstrip() for line in open(os.path.join(self.root, 'valid.txt'))]
-        #data_paths['test'] = [line.rstrip() for line in open(os.path.join(self.root, 'test.txt'))]
-
-        data_paths['train'] = [os.path.join(self.root,line.rstrip()) for line in open(os.path.join(self.root, 'train.txt'))]
-        data_paths['valid'] = [os.path.join(self.root,line.rstrip()) for line in open(os.path.join(self.root, 'valid.txt'))]
-        data_paths['test'] = [os.path.join(self.root,line.rstrip()) for line in open(os.path.join(self.root, 'test.txt'))]
-
-
         assert (split == 'train' or split == 'valid' or split == 'test')
-        #shape_names = ['_'.join(x.split('_')[0:-1]) for x in shape_ids[split]]
-        # list of (shape_name, shape_txt_file_path) tuple
-        #self.datapath = [(shape_names[i], os.path.join(self.root, shape_names[i], shape_ids[split][i]) + '.txt') for i
-                         #in range(len(shape_ids[split]))]
+
+        data_paths[split] = [os.path.join(self.root,line.rstrip()) for line in open(os.path.join(self.root, str(split)+'.txt'))]
+
         self.datapath = data_paths[split]
         print('The size of %s data is %d'%(split,len(self.datapath)))
-
-        self.cache_size = cache_size  # how many data points to cache in memory
-        self.cache = {}  # from index to (point_set, cls) tuple
 
         data = []
         labels = []
@@ -171,16 +156,10 @@ class PPI4DOCKDataLoader(Dataset):
             path = path_and_index[0]
             label = int(path_and_index[1])
             point_set = np.loadtxt(path, delimiter=' ').astype(np.float32) #[N,3+4+20+2]
-            # point_set[:, 0:3] = pc_normalize(point_set[:, 0:3])
+            point_set[:, 0:3] = pc_normalize(point_set[:, 0:3])
 
-            if self.use_ph:
-                npoints = point_set.shape[0]
-                table = np.tile(self.ph_table,[npoints,1,1])
-                res_f = point_set[:,7:27]
-                ph_f = table[res_f==1]
-                a = point_set[:,0:27]
-                b = point_set[:,[27,28]]
-                point_set = np.concatenate((a,ph_f,b),axis=1) #29+6=35
+            if not self.use_res:
+                point_set = np.concatenate((point_set[:, 0:7],point_set[:, -2:]),axis=1) #only atom        
             
             data.append(point_set)
             labels.append(label)

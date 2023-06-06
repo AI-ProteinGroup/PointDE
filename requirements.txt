@@ -6,3 +6,4 @@ scikit-learn==0.24.2
 cudatoolkit==10.2.89
 torchvision==0.6.0
 tensorboard==2.4.0
+torchsampler

@@ -1,7 +1,13 @@
 checkpoint/*
+checkpoint_*/*
 !checkpoint/.gitkeep
 data/*
+log/
+runs/
 ssr_sv
-dockground61
+dockground61*
 !data/.gitkeep
+protein_length_roc.py
+split_antibody.py
+split.py
 __pycache__
